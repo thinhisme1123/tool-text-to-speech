@@ -2,58 +2,67 @@ import streamlit as st
 import asyncio
 import edge_tts
 import io
+import os
 
-st.set_page_config(page_title="Công cụ TTS Cá Nhân", page_icon="🕵️")
-st.title("🕵️ Hồ Sơ Âm Thanh: Công cụ TTS Bí Ẩn")
-st.write("Tối ưu hóa riêng cho thể loại kể chuyện, podcast vụ án và kinh dị.")
+# Cấu hình giao diện chung
+st.set_page_config(page_title="Trạm Thu Âm TTS", page_icon="🎙️", layout="centered")
 
-# Danh sách giọng đọc được tuyển chọn cho concept Kể chuyện / Bí ẩn
-VOICES = {
-    "🇻🇳 Tiếng Việt - Nam (Nam Minh) - Điềm tĩnh, thời sự": "vi-VN-NamMinhNeural",
-    "🇻🇳 Tiếng Việt - Nữ (Hoài My) - Tự nhiên, truyền cảm": "vi-VN-HoaiMyNeural",
-    "🇺🇸 Tiếng Anh - Nam (Christopher) - Trầm khàn, kể chuyện tâm lý": "en-US-ChristopherNeural",
-    "🇺🇸 Tiếng Anh - Nam (Roger) - Gai góc, hồ sơ vụ án": "en-US-RogerNeural",
-    "🇺🇸 Tiếng Anh - Nam (Steffan) - Sắc lạnh, rành mạch": "en-US-SteffanNeural",
-    "🇺🇸 Tiếng Anh - Nữ (Aria) - Trầm ấm, bí ẩn": "en-US-AriaNeural"
-}
+st.title("🎙️ Trạm Thu Âm Văn Bản (TTS Studio)")
+st.write("Công cụ chuyển đổi văn bản sang giọng nói đa năng. Hoàn toàn miễn phí.")
 
-st.subheader("1. Setup nhân vật kể chuyện")
-selected_voice_label = st.selectbox("Chọn chất giọng AI:", list(VOICES.keys()))
-voice_id = VOICES[selected_voice_label]
+# Phân loại giọng đọc để dễ lựa chọn
+st.subheader("1. Lựa chọn Giọng đọc")
 
+# Sử dụng cột để giao diện gọn gàng hơn
 col1, col2 = st.columns(2)
+
 with col1:
-    # Để làm giọng bí ẩn, tốc độ nên giảm xuống khoảng 0.8x - 0.9x
-    rate = st.slider("Tốc độ kể (Speed):", min_value=0.5, max_value=2.0, value=0.9, step=0.1, 
-                     help="Giảm tốc độ xuống 0.8x - 0.9x để tạo cảm giác chậm rãi, hồi hộp.")
-    rate_str = f"{'+' if rate >= 1.0 else ''}{int((rate - 1.0) * 100)}%"
+    language = st.radio("Ngôn ngữ chính:", ["Tiếng Việt 🇻🇳", "Tiếng Anh (US) 🇺🇸"])
 
 with col2:
-    # Hạ cao độ (Pitch) xuống số âm để giọng trầm và lạnh hơn
-    pitch = st.slider("Độ trầm bổng (Pitch):", min_value=-50, max_value=50, value=-15, step=1,
-                      help="Kéo về số âm (-15 đến -25) để giọng trầm, nam tính và rùng rợn hơn.")
+    if language == "Tiếng Việt 🇻🇳":
+        voices = {
+            "Nữ - Hoài My (Tự nhiên, truyền cảm)": "vi-VN-HoaiMyNeural",
+            "Nam - Nam Minh (Điềm tĩnh, thời sự)": "vi-VN-NamMinhNeural"
+        }
+    else:
+        voices = {
+            "Nam - Christopher (Trầm ấm, kể chuyện)": "en-US-ChristopherNeural",
+            "Nữ - Aria (Rõ ràng, chuyên nghiệp)": "en-US-AriaNeural",
+            "Nam - Steffan (Sắc sảo, tin tức)": "en-US-SteffanNeural",
+            "Nữ - Jenny (Trẻ trung, năng động)": "en-US-JennyNeural"
+        }
+    selected_voice = st.selectbox("Chất giọng AI:", list(voices.keys()))
+    voice_id = voices[selected_voice]
+
+st.subheader("2. Tùy chỉnh Nâng cao")
+col3, col4 = st.columns(2)
+with col3:
+    rate = st.slider("Tốc độ (Speed):", 0.5, 2.0, 1.0, 0.1, help="1.0 là tốc độ chuẩn.")
+    rate_str = f"{'+' if rate >= 1.0 else ''}{int((rate - 1.0) * 100)}%"
+with col4:
+    pitch = st.slider("Cao độ (Pitch):", -50, 50, 0, 1, help="Âm (-) để giọng trầm hơn, Dương (+) để giọng cao hơn.")
     pitch_str = f"{'+' if pitch >= 0 else ''}{int(pitch)}Hz"
 
-st.subheader("2. Kịch bản vụ án")
-uploaded_file = st.file_uploader("Tải lên file kịch bản (.txt)", type=["txt"])
+st.subheader("3. Nhập Dữ liệu")
+uploaded_file = st.file_uploader("Tải file văn bản (.txt) lên đây:", type=["txt"])
 
-default_text = "Vào một đêm sương mù dày đặc năm 1998, tại một thị trấn hẻo lánh không có trên bản đồ... cảnh sát phát hiện ra một manh mối mà họ ước rằng mình chưa từng tìm thấy."
+# Xác định tên file đầu ra
 if uploaded_file is not None:
+    export_filename = uploaded_file.name.replace(".txt", ".mp3")
     stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
     default_text = stringio.read()
+else:
+    export_filename = "ban_thu_am_tts.mp3"
+    default_text = "Chào mừng bạn đến với Trạm thu âm. Hãy dán đoạn văn bản cần chuyển đổi vào đây..."
 
-text_content = st.text_area(
-    "Nội dung cần thu âm:", 
-    value=default_text, 
-    height=250
-)
+text_content = st.text_area("Hoặc nhập trực tiếp văn bản:", value=default_text, height=200)
 
-st.subheader("3. Thu âm & Trích xuất")
-if st.button("Bắt đầu kết xuất MP3", type="primary"):
+st.subheader("4. Xử lý & Trích xuất")
+if st.button("🎧 Bắt đầu tạo file MP3", type="primary", use_container_width=True):
     if not text_content.strip():
-        st.error("Kịch bản đang trống!")
+        st.warning("Vui lòng cung cấp nội dung cần đọc!")
     else:
-        # Cập nhật hàm gọi API có thêm tham số pitch
         async def convert_text_to_mp3(text, voice, speed, pitch_val):
             communicate = edge_tts.Communicate(text, voice, rate=speed, pitch=pitch_val)
             audio_data = b""
@@ -62,20 +71,21 @@ if st.button("Bắt đầu kết xuất MP3", type="primary"):
                     audio_data += chunk["data"]
             return audio_data
 
-        with st.spinner("Đang trong phòng thu AI..."):
+        with st.spinner("Đang tổng hợp giọng nói..."):
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 mp3_bytes = loop.run_until_complete(convert_text_to_mp3(text_content, voice_id, rate_str, pitch_str))
                 
-                st.success("🎙️ Xử lý hoàn tất!")
+                st.success("✅ Hoàn tất! Bạn có thể nghe thử hoặc tải về bên dưới.")
                 st.audio(mp3_bytes, format="audio/mp3")
                 
                 st.download_button(
-                    label="💾 Tải file MP3 (Án mạng bí ẩn) về máy",
+                    label=f"⬇️ Tải xuống: {export_filename}",
                     data=mp3_bytes,
-                    file_name="ho_so_vu_an.mp3",
-                    mime="audio/mp3"
+                    file_name=export_filename,
+                    mime="audio/mp3",
+                    use_container_width=True
                 )
             except Exception as e:
-                st.error(f"Lỗi hệ thống: {e}")
+                st.error(f"Có lỗi xảy ra: {e}")
